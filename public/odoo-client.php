@@ -7,7 +7,7 @@ function osaec_odoo_config(string $webRoot): array {
     $config = require $path;
     if (!is_array($config)) throw new RuntimeException('Invalid private Odoo configuration.');
     $url = rtrim((string) ($config['url'] ?? ''), '/');
-    $key = (string) ($config['api_key'] ?? '');
+    $key = trim((string) ($config['api_key'] ?? ''));
     if (parse_url($url, PHP_URL_SCHEME) !== 'https' || $key === '' || preg_match('/[\r\n]/', $key)) {
         throw new RuntimeException('An HTTPS URL and a valid private API key are required.');
     }
