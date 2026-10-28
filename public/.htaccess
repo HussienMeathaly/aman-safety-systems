@@ -1,0 +1,14 @@
+# 1. إجبار السيرفر على إرسال ملفات JS بنوع MIME الصحيح
+<IfModule mod_mime.c>
+  AddType application/javascript .js .mjs
+</IfModule>
+
+# 2. توجيه جميع المسارات لـ index.html لتفادي الشاشة البيضاء عند التحديث
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+  RewriteRule ^index\.html$ - [L]
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule . /index.html [L]
+</IfModule>
