@@ -1,3 +1,5 @@
 # AGENTS.md
 
-- Service requests: `src/components/ServiceRequestForm.tsx` posts to `public/odoo-bridge.php` (ships in the Vite build, runs on the client's Hostinger PHP hosting) which calls the client's custom Odoo REST endpoint `POST /api/v1/crm/leads` with an `X-API-Key` header and a deterministic `external_id` for idempotency; if the bridge fails, the form falls back to WhatsApp so no request is lost. Why: Odoo has no CORS and the key must stay server-side; site is static on Hostinger, so the bridge is plain PHP with config constants at the top.
+- Service requests use the Hostinger PHP bridge and shared `public/odoo-client.php`; load credentials only from `../private/odoo-config.php` relative to deployed public_html and keep logs in that private directory. Why: this static Hostinger deployment must not expose credentials through GitHub or public build artifacts.
+- The bridge sends deterministic external_id references and relies on Odoo for deduplication; WhatsApp fallback requires the visitor to send the message. Why: opening WhatsApp is not delivery confirmation.
+- Staging checks are CLI-only in `scripts/check-odoo-staging.php`, restrict the hostname to documented staging, and omit source overrides. Why: verify Odoo's configured website source without creating a public diagnostic endpoint or assuming production readiness.

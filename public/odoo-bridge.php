@@ -6,29 +6,17 @@
  *
  *  مكان الرفع: المجلد الرئيسي للموقع على استضافة هوستنجر (بجانب index.html).
  *
- *  المطلوب من مبرمج أودو: تعبئة الإعدادات الأربعة أدناه فقط.
- *  ملاحظة: أثناء فراغ الإعدادات يرجع الوسيط code = not_configured
- *  والموقع يفتح واتساب تلقائياً كخطوة احتياطية — لن تضيع أي طلبات.
+ *  الإعدادات السرية في ../private/odoo-config.php خارج public_html.
+ *  عند غيابها يفتح النموذج واتساب؛ العميل يحتاج الضغط على إرسال.
  * =====================================================================
  */
 
 declare(strict_types=1);
 
-/* ==================== الإعدادات ==================== */
-
-// رابط أودو بدون شرطة مائلة في النهاية (حالياً النسخة التجريبية)
-const ODOO_URL     = 'https://wahattamuyztest.odoo.com';
-
-// مفتاح API الخاص بالموقع (CRM → Configuration → Lead API Clients)
-const ODOO_API_KEY = 'rZb9uqghPIx7_YnKoMih0M6w9KoXzPQfH-wHCN4KRZk';
-
-// اسم "المصدر" في أودو للفلترة — يجب أن يكون موجوداً مسبقاً في أودو بنفس الاسم حرفياً
-// (وإلا يُستخدم المصدر الافتراضي المحدد في أودو). اتركه فارغاً للاعتماد على إعداد أودو.
-const ODOO_SOURCE_NAME = '';
+require_once __DIR__ . '/odoo-client.php';
 
 /* ==================== ثوابت النظام ==================== */
-
-const LOG_DIR        = __DIR__ . '/odoo-logs';
+const LOG_DIR = __DIR__ . '/../private/odoo-logs';
 const MAX_BODY_BYTES = 10000;
 const RATE_LIMIT_MAX = 5;    // أقصى عدد طلبات من نفس الزائر
 const RATE_WINDOW    = 900;  // خلال 15 دقيقة (بالثواني)
@@ -43,12 +31,7 @@ function send_json(array $data, int $http = 200): void {
 }
 
 function ensure_log_dir(): void {
-    if (!is_dir(LOG_DIR)) {
-        @mkdir(LOG_DIR, 0750, true);
-        // منع الوصول لملفات السجلات من المتصفح
-        @file_put_contents(LOG_DIR . '/.htaccess', "Require all denied\nOrder allow,deny\nDeny from all\n");
-        @file_put_contents(LOG_DIR . '/index.html', '');
-    }
+    if (!is_dir(LOG_DIR)) @mkdir(LOG_DIR, 0700, true);
 }
 
 function append_log(string $file, array $data): void {
@@ -81,29 +64,7 @@ function rate_limited(): bool {
 
 /** إرسال الطلب إلى واجهة أودو المخصصة: POST /api/v1/crm/leads */
 function odoo_create_lead(array $payload): array {
-    $ch = curl_init(rtrim(ODOO_URL, '/') . '/api/v1/crm/leads');
-    curl_setopt_array($ch, [
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => json_encode($payload, JSON_UNESCAPED_UNICODE),
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_CONNECTTIMEOUT => 10,
-        CURLOPT_TIMEOUT        => 25,
-        CURLOPT_HTTPHEADER     => [
-            'Content-Type: application/json; charset=utf-8',
-            'X-API-Key: ' . ODOO_API_KEY,
-        ],
-    ]);
-    $raw  = curl_exec($ch);
-    $err  = curl_error($ch);
-    $http = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-    curl_close($ch);
-
-    if ($raw === false) throw new RuntimeException('تعذر الاتصال بأودو: ' . $err);
-    $json = json_decode((string) $raw, true);
-    if (!is_array($json) || empty($json['success'])) {
-        throw new RuntimeException('رد أودو (HTTP ' . $http . '): ' . substr((string) $raw, 0, 500));
-    }
-    return $json;
+    return osaec_odoo_request(osaec_odoo_config(__DIR__), 'POST', '/api/v1/crm/leads', $payload);
 }
 
 /* ==================== التحقق من المدخلات ==================== */
@@ -167,11 +128,11 @@ try {
     $serviceName = trim((string) ($in['service_name'] ?? ''));
     $page        = trim((string) ($in['page'] ?? ''));
 
-    // الوسيط غير مهيأ بعد → الموقع يتحول تلقائياً لواتساب
-    if (ODOO_URL === '' || ODOO_API_KEY === '') {
+    try {
+        osaec_odoo_config(__DIR__);
+    } catch (Throwable $e) {
         append_log('submissions.jsonl', [
-            'at' => date('c'), 'ip' => client_ip(), 'status' => 'not_configured',
-            'name' => $name, 'mobile' => $mobile, 'service' => $serviceName, 'page' => $page, 'message' => $message,
+            'at' => date('c'), 'status' => 'not_configured',
         ]);
         send_json(['ok' => false, 'code' => 'not_configured', 'message' => 'لم يتم ربط أودو بعد']);
     }
@@ -193,7 +154,7 @@ try {
         'country_code' => 'SA',
     ];
     if ($email !== '') $payload['email'] = $email;
-    if (ODOO_SOURCE_NAME !== '') $payload['source'] = ODOO_SOURCE_NAME;
+    // لا نرسل source: نعتمد مصدر الموقع المضبوط في سجل API داخل أودو.
 
     $res = odoo_create_lead($payload);
     $leadId = (int) ($res['lead_id'] ?? 0);
