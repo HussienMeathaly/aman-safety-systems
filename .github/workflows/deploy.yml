@@ -3,8 +3,8 @@ name: Build and Deploy to Hostinger
 on:
   push:
     branches:
-      - main  # أو اسم الفرع الخاص بك
-
+      - main
+  workflow_dispatch: # هذا السطر يتيح لك التشغيل اليدوي بضغطة زر
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
